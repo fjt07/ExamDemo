@@ -1,0 +1,61 @@
+select count(distinct a.msisdn)uv
+from (select msisdn,sum(pv)pv
+from PAGEVISIT
+where record_day between '20171001' and '20171007'
+group by msisdn)a join USER_INFO b
+on a.msisdn=b.msisdn
+where a.pv>100
+and b.sex='ÄÐ';
+
+select msisdn
+from (select msisdn,listagg(record_day,',') within group (order by record_day)record_day
+from (select distinct msisdn,record_day
+from PAGEVISIT
+where record_day between '20171001' and '20171007')a
+group by msisdn)b
+where instr(record_day,'20171001,20171002,20171003')>0
+or instr(record_day,'20171002,20171003,20171004')>0
+or instr(record_day,'20171003,20171004,20171005')>0
+or instr(record_day,'20171004,20171005,20171006')>0
+or instr(record_day,'20171005,20171006,20171007')>0;
+
+create table cx_fujuntao_salary as
+select *
+from (select a.*,row_number()over(partition by DEPARTMENTID order by salary desc)rn
+from (select distinct DEPARTMENTID,salary
+from EMPLOYEE)a)b
+where rn<=3;
+
+select d.DEPT_NAME,c.name,c.salary
+from (select a.name,b.DEPARTMENTID,b.salary
+from EMPLOYEE a join cx_fujuntao_salary b
+on a.DEPARTMENTID=b.DEPARTMENTID
+where a.salary=b.salary)c join DEPARTMENT d
+on c.DEPARTMENTID=d.DEPARTMENTID;
+
+create table cx_fujuntao_taxi as
+select c.*,d.BANNED as drive_type
+from (select a.*,b.BANNED as client_type
+from (select *
+from TRIPS
+where REQUEST_AT between '2013-10-01' and '2013-10-03')a
+join USERS b
+on a.CLIEND_ID=b.USER_ID)c join USERS d
+on c.DRIVER_ID=d.USER_ID;
+
+create table cx_fujuntao_taxi1 as
+select REQUEST_AT,count(*)pv
+from cx_fujuntao_taxi
+where (STATUS='CANCELLED_BY_DRIVER' and drive_type='No')
+or (STATUS='CANCELLED_BY_CLIENT' and client_type='No')
+group by REQUEST_AT;
+
+select REQUEST_AT as Day,cast(pv/num as numeric(18, 2)) as Cancellation_Rate
+from (select b.*,case when c.pv is null then 0 else c.pv end as pv
+from (select REQUEST_AT,sum(num)num
+from (select ID,REQUEST_AT,case when drive_type='No' and client_type='No' then 2
+when drive_type='No' or client_type='No' then 1 else 0 end as num
+from cx_fujuntao_taxi)a
+group by REQUEST_AT)b left join cx_fujuntao_taxi1 c
+on b.REQUEST_AT=c.REQUEST_AT)d
+order by REQUEST_AT;
